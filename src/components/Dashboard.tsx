@@ -163,8 +163,12 @@ const Dashboard = () => {
         if (selectedCategories.length && !selectedCategories.includes(i.category)) continue;
         if (selectedSubCategories.length && !selectedSubCategories.includes(i.subCategory)) continue;
         if (selectedLabels.length && !i.labels.some(l => selectedLabels.includes(l))) continue;
-        for (const label of i.labels) {
-          map.set(label, (map.get(label) || 0) + i.price);
+        // When filtering by labels, only aggregate the selected labels
+        const labelsToAggregate = selectedLabels.length > 0 ? selectedLabels : i.labels;
+        for (const label of labelsToAggregate) {
+          if (i.labels.includes(label)) {
+            map.set(label, (map.get(label) || 0) + i.price);
+          }
         }
       }
     }
