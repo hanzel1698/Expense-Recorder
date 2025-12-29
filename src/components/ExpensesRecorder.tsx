@@ -86,14 +86,16 @@ const ExpensesRecorder = () => {
 
   const addItem = () => {
     if (!itemName || !itemPrice || !itemCategory) return;
-    const newItem: Item = {
+    const baseItem = {
       name: itemName,
       price: parseFloat(itemPrice),
       category: itemCategory,
       subCategory: itemSubCategory,
       labels: itemLabels,
-      notes: itemNotes || undefined
-    };
+    } as Item;
+    const newItem: Item = itemNotes.trim()
+      ? { ...baseItem, notes: itemNotes }
+      : baseItem;
     setItems(prev => [...prev, newItem]);
     setItemName('');
     setItemPrice('');
@@ -110,7 +112,7 @@ const ExpensesRecorder = () => {
       date: date,
       shop,
       items,
-      paymentMode: paymentMode || undefined
+      ...(paymentMode ? { paymentMode } : {})
     };
     addReceipt(receipt);
     setShop('');

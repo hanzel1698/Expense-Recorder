@@ -302,10 +302,13 @@ export const ExpenseProvider: React.FC<{ children: ReactNode }> = ({ children })
       ...prev,
       paymentModes: prev.paymentModes.filter(m => m !== mode)
     }));
-    setReceipts(prev => prev.map(r => ({
-      ...r,
-      paymentMode: r.paymentMode === mode ? undefined : r.paymentMode
-    })));
+    setReceipts(prev => prev.map(r => {
+      if (r.paymentMode === mode) {
+        const { paymentMode: _removed, ...rest } = r;
+        return rest as Receipt;
+      }
+      return r;
+    }));
   };
 
   const resetAll = () => {
