@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useExpense } from '../context/ExpenseContext';
 import type { Item, Receipt } from '../types';
+import EditReceipt from './EditReceipt';
 import './ExpensesRecorder.css';
 
 const ExpensesRecorder = () => {
-  const { addReceipt, categoryData } = useExpense();
+  const { addReceipt, categoryData, receipts, deleteReceipt } = useExpense();
   const [shop, setShop] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [items, setItems] = useState<Item[]>([]);
@@ -15,6 +16,17 @@ const ExpensesRecorder = () => {
   const [itemLabels, setItemLabels] = useState<string[]>([]);
   const [itemNotes, setItemNotes] = useState('');
   const [showLabelsPopup, setShowLabelsPopup] = useState(false);
+  const [showReceiptsPopup, setShowReceiptsPopup] = useState(false);
+  const [editingReceipt, setEditingReceipt] = useState<Receipt | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedSubCategories, setSelectedSubCategories] = useState<string[]>([]);
+  const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
+  const [showReceiptCategoryFilters, setShowReceiptCategoryFilters] = useState(false);
+  const [showReceiptSubFilters, setShowReceiptSubFilters] = useState(false);
+  const [showReceiptLabelFilters, setShowReceiptLabelFilters] = useState(false);
 
   const addItem = () => {
     if (!itemName || !itemPrice || !itemCategory) return;
@@ -57,11 +69,29 @@ const ExpensesRecorder = () => {
     }
   };
 
+  const filteredReceipts = receipts.filter((r) => {
+    const d = r.date || '';
+    if (startDate && d < startDate) return false;
+    if (endDate && d > endDate) return false;
+    return true;
+  });
+
+  const subCategoryOptions = Array.from(
+    new Set(
+      Object.values(categoryData.categories)
+        .flat()
+        .filter((s) => s)
+    )
+  ).sort();
+
   return (
     <div className="expense-recorder">
       <div className="recorder-card">
         <div className="recorder-header">
           <h1>📝 Record Expenses</h1>
+          <button onClick={() => setShowReceiptsPopup(true)} className="view-receipts-btn">
+            📄 View Receipts
+          </button>
         </div>
 
         <div className="receipt-info-section">
@@ -210,6 +240,208 @@ const ExpensesRecorder = () => {
           💾 Save Receipt
         </button>
       </div>
+
+      {showReceiptsPopup && (
+        <>
+          <div className="modal-overlay" onClick={() => setShowReceiptsPopup(false)} />
+          <div className="modal">
+            <h2>📄 Saved Receipts</h2>
+            
+            <div className="search-container">
+              <input 
+                type="text" 
+                placeholder="🔍 Search receipts, items, categories..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="search-input"
+              />
+            </div>
+
+            <div className="filters-container">
+              <div className="date-filter">
+                <label>Start Date:</label>
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              </div>
+              <div className="date-filter">
+                <label>End Date:</label>
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              </div>
+              <div className="filter-buttons">
+                <button onClick={() => setShowReceiptCategoryFilters((v) => !v)} className="filter-btn">
+                  📂 Categories
+                </button>
+                <button onClick={() => setShowReceiptSubFilters((v) => !v)} className="filter-btn">
+                  📁 Sub-categories
+                </button>
+                <button onClick={() => setShowReceiptLabelFilters((v) => !v)} className="filter-btn">
+                  🏷️ Labels
+                </button>
+                <button 
+                  onClick={() => { 
+                    setSearchQuery('');
+                    setStartDate(''); 
+                    setEndDate(''); 
+                    setSelectedCategories([]); 
+                    setSelectedSubCategories([]); 
+                    setSelectedLabels([]); 
+                  }}
+                  className="clear-btn"
+                >
+                  🔄 Clear
+                </button>
+              </div>
+            </div>
+
+            {showReceiptCategoryFilters && (
+              <div className="filter-options">
+                {Object.keys(categoryData.categories).map((cat) => (
+                  <div key={cat} className="filter-option">
+                    <input
+                      type="checkbox"
+                      id={`receipt-cat-${cat}`}
+                      checked={selectedCategories.includes(cat)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedCategories((prev) => [...prev, cat]);
+                        } else {
+                          setSelectedCategories((prev) => prev.filter((c) => c !== cat));
+                        }
+                      }}
+                    />
+                    <label htmlFor={`receipt-cat-${cat}`}>{cat}</label>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {showReceiptSubFilters && (
+              <div className="filter-options">
+                {subCategoryOptions.map((sub) => (
+                  <div key={sub} className="filter-option">
+                    <input
+                      type="checkbox"
+                      id={`receipt-sub-${sub}`}
+                      checked={selectedSubCategories.includes(sub)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedSubCategories((prev) => [...prev, sub]);
+                        } else {
+                          setSelectedSubCategories((prev) => prev.filter((s) => s !== sub));
+                        }
+                      }}
+                    />
+                    <label htmlFor={`receipt-sub-${sub}`}>{sub}</label>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {showReceiptLabelFilters && (
+              <div className="filter-options">
+                {categoryData.labels.map((label) => (
+                  <div key={label} className="filter-option">
+                    <input
+                      type="checkbox"
+                      id={`receipt-label-${label}`}
+                      checked={selectedLabels.includes(label)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedLabels((prev) => [...prev, label]);
+                        } else {
+                          setSelectedLabels((prev) => prev.filter((l) => l !== label));
+                        }
+                      }}
+                    />
+                    <label htmlFor={`receipt-label-${label}`}>{label}</label>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {filteredReceipts
+              .filter(r => {
+                if (!searchQuery) return true;
+                const query = searchQuery.toLowerCase();
+                
+                // Search in shop name
+                if (r.shop.toLowerCase().includes(query)) return true;
+                
+                // Search in date
+                if (r.date && r.date.includes(query)) return true;
+                
+                // Search in items
+                return r.items.some(item => 
+                  item.name.toLowerCase().includes(query) ||
+                  item.category.toLowerCase().includes(query) ||
+                  item.subCategory.toLowerCase().includes(query) ||
+                  item.price.toString().includes(query) ||
+                  item.labels.some(label => label.toLowerCase().includes(query))
+                );
+              })
+              .map(r => (
+              <div key={r.id} className="receipt-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3>🛒 {r.shop} - {r.date ? r.date.split('-').reverse().join('-') : ''}</h3>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button 
+                      onClick={() => setEditingReceipt(r)}
+                      className="edit-receipt-btn"
+                      title="Edit Receipt"
+                    >
+                      ✏️
+                    </button>
+                    <button 
+                      onClick={() => {
+                        if (confirm(`Delete receipt from ${r.shop}?`)) {
+                          deleteReceipt(r.id);
+                        }
+                      }}
+                      className="delete-receipt-btn"
+                      title="Delete Receipt"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+                <ul className="receipt-items">
+                  {r.items
+                    .filter((i) => {
+                      if (selectedCategories.length && !selectedCategories.includes(i.category)) return false;
+                      if (selectedSubCategories.length && !selectedSubCategories.includes(i.subCategory)) return false;
+                      if (selectedLabels.length && !i.labels.some(l => selectedLabels.includes(l))) return false;
+                      return true;
+                    })
+                    .map((i, idx) => (
+                      <li key={idx}>
+                        <strong>{i.name}</strong>: ₹{i.price.toFixed(2)} 
+                        <span style={{ opacity: 0.8 }}> ({i.category}, {i.subCategory})</span>
+                        {i.labels.length > 0 && (
+                          <span style={{ opacity: 0.8 }}> • 🏷️ {i.labels.join(', ')}</span>
+                        )}
+                        {i.notes && (
+                          <div style={{ fontSize: '0.9em', opacity: 0.7, marginTop: '0.25rem' }}>
+                            📝 {i.notes}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            ))}
+
+            <button onClick={() => setShowReceiptsPopup(false)} className="modal-close-btn">
+              Close
+            </button>
+          </div>
+        </>
+      )}
+
+      {editingReceipt && (
+        <EditReceipt 
+          receipt={editingReceipt} 
+          onClose={() => setEditingReceipt(null)} 
+        />
+      )}
 
       {showLabelsPopup && (
         <>

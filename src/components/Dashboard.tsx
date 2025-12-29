@@ -15,7 +15,7 @@ import {
 import './Dashboard.css';
 
 const Dashboard = () => {
-  const { receipts, categoryData } = useExpense();
+  const { receipts, categoryData, pushToFirestore, pullFromFirestore, isPushing, isPulling, lastPushTime, lastPullTime, deleteReceipt } = useExpense();
   const [showReceiptsPopup, setShowReceiptsPopup] = useState(false);
   const [editingReceipt, setEditingReceipt] = useState<Receipt | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -31,6 +31,38 @@ const Dashboard = () => {
   const [showReceiptCategoryFilters, setShowReceiptCategoryFilters] = useState(false);
   const [showReceiptSubFilters, setShowReceiptSubFilters] = useState(false);
   const [showReceiptLabelFilters, setShowReceiptLabelFilters] = useState(false);
+
+  const handlePush = async () => {
+    try {
+      await pushToFirestore();
+    } catch (error) {
+      console.error('Push failed:', error);
+      alert('Failed to push to Firestore. Check console for details.');
+    }
+  };
+
+  const handlePull = async () => {
+    try {
+      await pullFromFirestore();
+    } catch (error) {
+      console.error('Pull failed:', error);
+      alert('Failed to pull from Firestore. Check console for details.');
+    }
+  };
+
+  const formatLastTime = (time: Date | null, label: string) => {
+    if (!time) return `Never ${label}`;
+    const now = new Date();
+    const diff = now.getTime() - time.getTime();
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return 'Just now';
+    if (minutes === 1) return '1 minute ago';
+    if (minutes < 60) return `${minutes} minutes ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours === 1) return '1 hour ago';
+    if (hours < 24) return `${hours} hours ago`;
+    return time.toLocaleString();
+  };
 
   const total = receipts.reduce((sum, r) => sum + r.items.reduce((s, i) => s + i.price, 0), 0);
 
@@ -211,9 +243,29 @@ const Dashboard = () => {
         <div className="total-expenses">
           Total Expenses: ₹{total.toFixed(2)}
         </div>
-        <button onClick={() => setShowReceiptsPopup(true)} className="receipts-btn">
-          📄 View Receipts
-        </button>
+        <div className="header-actions">
+          <button 
+            onClick={handlePush} 
+            className="push-btn"
+            disabled={isPushing}
+            title="Push local data to Firestore"
+          >
+            {isPushing ? '🔄 Pushing...' : '⬆️ Push'}
+          </button>
+          <span className="last-sync">{formatLastTime(lastPushTime, 'pushed')}</span>
+          <button 
+            onClick={handlePull} 
+            className="pull-btn"
+            disabled={isPulling}
+            title="Pull data from Firestore"
+          >
+            {isPulling ? '🔄 Pulling...' : '⬇️ Pull'}
+          </button>
+          <span className="last-sync">{formatLastTime(lastPullTime, 'pulled')}</span>
+          <button onClick={() => setShowReceiptsPopup(true)} className="receipts-btn">
+            📄 View Receipts
+          </button>
+        </div>
       </div>
 
       <div className="chart-card">
@@ -536,13 +588,26 @@ const Dashboard = () => {
               <div key={r.id} className="receipt-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h3>🛒 {r.shop} - {r.date ? r.date.split('-').reverse().join('-') : ''}</h3>
-                  <button 
-                    onClick={() => setEditingReceipt(r)}
-                    className="edit-receipt-btn"
-                    title="Edit Receipt"
-                  >
-                    ✏️
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button 
+                      onClick={() => setEditingReceipt(r)}
+                      className="edit-receipt-btn"
+                      title="Edit Receipt"
+                    >
+                      ✏️
+                    </button>
+                    <button 
+                      onClick={() => {
+                        if (confirm(`Delete receipt from ${r.shop}?`)) {
+                          deleteReceipt(r.id);
+                        }
+                      }}
+                      className="delete-receipt-btn"
+                      title="Delete Receipt"
+                    >
+                      🗑️
+                    </button>
+                  </div>
                 </div>
                 <ul className="receipt-items">
                   {r.items
@@ -558,6 +623,11 @@ const Dashboard = () => {
                         <span style={{ opacity: 0.8 }}> ({i.category}, {i.subCategory})</span>
                         {i.labels.length > 0 && (
                           <span style={{ opacity: 0.8 }}> • 🏷️ {i.labels.join(', ')}</span>
+                        )}
+                        {i.notes && (
+                          <div style={{ fontSize: '0.9em', opacity: 0.7, marginTop: '0.25rem' }}>
+                            📝 {i.notes}
+                          </div>
                         )}
                       </li>
                     ))}

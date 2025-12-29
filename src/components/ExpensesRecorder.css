@@ -11,12 +11,32 @@
 }
 
 .recorder-header {
-  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 2rem;
 }
 
 .recorder-header h1 {
   color: var(--primary);
+  margin: 0;
+}
+
+.view-receipts-btn {
+  background: linear-gradient(135deg, var(--accent) 0%, #0d9488 100%);
+  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.3);
+  padding: 0.75rem 1.5rem;
+  border-radius: 12px;
+  border: none;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.view-receipts-btn:hover {
+  box-shadow: 0 6px 16px rgba(20, 184, 166, 0.4);
+  transform: translateY(-2px);
 }
 
 .receipt-info-section {

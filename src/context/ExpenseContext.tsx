@@ -1,7 +1,7 @@
-import { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { Receipt, CategoryData } from '../types';
-import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../hooks/useAuth';
 
@@ -9,6 +9,7 @@ interface ExpenseContextType {
   receipts: Receipt[];
   addReceipt: (receipt: Receipt) => void;
   updateReceipt: (receipt: Receipt) => void;
+  deleteReceipt: (receiptId: string) => void;
   categoryData: CategoryData;
   addCategory: (name: string) => void;
   addSubCategory: (category: string, sub: string) => void;
@@ -24,16 +25,22 @@ interface ExpenseContextType {
   autoBackup: boolean;
   setAutoBackup: (enabled: boolean) => void;
   restoreFromLocalBackup: () => void;
+  pushToFirestore: () => Promise<void>;
+  pullFromFirestore: () => Promise<void>;
+  isPushing: boolean;
+  isPulling: boolean;
+  lastPushTime: Date | null;
+  lastPullTime: Date | null;
 }
 
 const ExpenseContext = createContext<ExpenseContextType | undefined>(undefined);
 
 export const ExpenseProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { user, loading: authLoading } = useAuth();
-  const isSyncingFromFirestore = useRef(false);
-  const hasInitiallyLoaded = useRef(false);
-  const hasLocalData = useRef(false);
-  const syncDebounceTimer = useRef<number | null>(null);
+  const [isPushing, setIsPushing] = useState(false);
+  const [isPulling, setIsPulling] = useState(false);
+  const [lastPushTime, setLastPushTime] = useState<Date | null>(null);
+  const [lastPullTime, setLastPullTime] = useState<Date | null>(null);
   const RECEIPTS_KEY = 'expenseRecorder.receipts';
   const CATEGORY_DATA_KEY = 'expenseRecorder.categoryData';
   const BACKUP_KEY = 'expenseRecorder.backup';
@@ -53,7 +60,6 @@ export const ExpenseProvider: React.FC<{ children: ReactNode }> = ({ children })
     try {
       const raw = localStorage.getItem(RECEIPTS_KEY);
       if (raw) {
-        hasLocalData.current = true;
         return JSON.parse(raw) as Receipt[];
       }
       return [];
@@ -67,7 +73,6 @@ export const ExpenseProvider: React.FC<{ children: ReactNode }> = ({ children })
       const raw = localStorage.getItem(CATEGORY_DATA_KEY);
       const parsed = raw ? (JSON.parse(raw) as CategoryData) : null;
       if (parsed && parsed.categories && parsed.labels) {
-        hasLocalData.current = true;
         return parsed;
       }
       return defaultCategoryData;
@@ -96,6 +101,10 @@ export const ExpenseProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   const updateReceipt = (receipt: Receipt) => {
     setReceipts(prev => prev.map(r => r.id === receipt.id ? receipt : r));
+  };
+
+  const deleteReceipt = (receiptId: string) => {
+    setReceipts(prev => prev.filter(r => r.id !== receiptId));
   };
 
   const addCategory = (name: string) => {
@@ -294,96 +303,76 @@ export const ExpenseProvider: React.FC<{ children: ReactNode }> = ({ children })
     } catch {}
   }, [categoryData]);
 
-  // Sync to Firestore with debouncing (2 seconds) to batch changes
-  useEffect(() => {
-    if (!user || authLoading || isSyncingFromFirestore.current) {
-      console.log('Skipping sync:', { user: !!user, authLoading, isSyncing: isSyncingFromFirestore.current });
+  // Push local data to Firestore
+  const pushToFirestore = async () => {
+    if (!user || authLoading) {
+      console.log('Cannot push: User not logged in');
       return;
     }
-    
-    // Clear existing timer
-    if (syncDebounceTimer.current) {
-      window.clearTimeout(syncDebounceTimer.current);
-    }
-    
-    console.log('Scheduling sync in 2 seconds...');
-    // Set new timer to sync after 2 seconds of no changes
-    syncDebounceTimer.current = window.setTimeout(async () => {
-      try {
-        const userDocRef = doc(db, 'users', user.uid);
-        console.log('Syncing to Firestore for user:', user.uid);
-        await setDoc(userDocRef, {
-          receipts,
-          categoryData,
-          updatedAt: new Date().toISOString(),
-        }, { merge: true });
-        console.log('✅ Synced to Firestore successfully');
-      } catch (error) {
-        console.error('❌ Error syncing to Firestore:', error);
-      }
-    }, 2000);
-    
-    return () => {
-      if (syncDebounceTimer.current) {
-        window.clearTimeout(syncDebounceTimer.current);
-      }
-    };
-  }, [receipts, categoryData, user, authLoading]);
 
-  // Real-time listener for Firestore sync
-  useEffect(() => {
-    if (!user || authLoading) return;
-    
-    const userDocRef = doc(db, 'users', user.uid);
-    console.log('📡 Setting up real-time listener for user:', user.uid);
-    
-    const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
-      // Only skip on very first load if we have localStorage data
-      if (!hasInitiallyLoaded.current && hasLocalData.current) {
-        console.log('⏭️ Skipping initial Firestore load - using localStorage');
-        hasInitiallyLoaded.current = true;
-        return;
-      }
+    setIsPushing(true);
+    try {
+      const userDocRef = doc(db, 'users', user.uid);
+      console.log('📤 Pushing to Firestore...');
       
-      console.log('📥 Firestore update, exists:', docSnap.exists());
-      if (!docSnap.exists()) {
-        hasInitiallyLoaded.current = true;
-        return;
-      }
-      
-      // Set flag to prevent circular sync only during this update
-      isSyncingFromFirestore.current = true;
-      
-      const data = docSnap.data();
-      console.log('Data from Firestore:', { 
-        receiptsCount: data.receipts?.length || 0,
-        categoriesCount: Object.keys(data.categoryData?.categories || {}).length 
+      // Use setDoc without merge to completely overwrite with local data
+      // This ensures deletions are reflected in Firestore
+      await setDoc(userDocRef, {
+        receipts,
+        categoryData,
+        updatedAt: new Date().toISOString(),
       });
       
-      if (data.receipts) {
-        setReceipts(data.receipts);
-      }
-      if (data.categoryData) {
-        setCategoryData(data.categoryData);
-      }
-      
-      // Mark as initially loaded
-      hasInitiallyLoaded.current = true;
-      
-      // Reset flag after a brief delay
-      setTimeout(() => {
-        isSyncingFromFirestore.current = false;
-        console.log('✅ Finished initial Firestore load');
-      }, 500);
-    }, (error) => {
-      console.error('❌ Error listening to Firestore:', error);
-    });
+      setLastPushTime(new Date());
+      console.log('✅ Push completed successfully');
+    } catch (error) {
+      console.error('❌ Error pushing to Firestore:', error);
+      throw error;
+    } finally {
+      setIsPushing(false);
+    }
+  };
 
-    return () => {
-      console.log('🔌 Cleaning up Firestore listener');
-      unsubscribe();
-    };
-  }, [user, authLoading]);
+  // Pull data from Firestore
+  const pullFromFirestore = async () => {
+    if (!user || authLoading) {
+      console.log('Cannot pull: User not logged in');
+      return;
+    }
+
+    setIsPulling(true);
+    try {
+      const userDocRef = doc(db, 'users', user.uid);
+      console.log('📥 Pulling from Firestore...');
+      
+      const docSnap = await getDoc(userDocRef);
+      
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        console.log('Received data from Firestore:', { 
+          receiptsCount: data.receipts?.length || 0,
+          categoriesCount: Object.keys(data.categoryData?.categories || {}).length 
+        });
+        
+        if (data.receipts) {
+          setReceipts(data.receipts);
+        }
+        if (data.categoryData) {
+          setCategoryData(data.categoryData);
+        }
+        
+        setLastPullTime(new Date());
+        console.log('✅ Pull completed successfully');
+      } else {
+        console.log('No data found in Firestore');
+      }
+    } catch (error) {
+      console.error('❌ Error pulling from Firestore:', error);
+      throw error;
+    } finally {
+      setIsPulling(false);
+    }
+  };
 
   // Auto-backup snapshot of both receipts and categoryData
   useEffect(() => {
@@ -410,7 +399,33 @@ export const ExpenseProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   return (
-    <ExpenseContext.Provider value={{ receipts, addReceipt, updateReceipt, categoryData, addCategory, addSubCategory, addLabel, resetAll, updateCategory, updateSubCategory, updateLabel, removeCategory, removeSubCategory, removeLabel, importData, autoBackup, setAutoBackup, restoreFromLocalBackup }}>
+    <ExpenseContext.Provider value={{ 
+      receipts, 
+      addReceipt, 
+      updateReceipt,
+      deleteReceipt, 
+      categoryData, 
+      addCategory, 
+      addSubCategory, 
+      addLabel, 
+      resetAll, 
+      updateCategory, 
+      updateSubCategory, 
+      updateLabel, 
+      removeCategory, 
+      removeSubCategory, 
+      removeLabel, 
+      importData, 
+      autoBackup, 
+      setAutoBackup, 
+      restoreFromLocalBackup,
+      pushToFirestore,
+      pullFromFirestore,
+      isPushing,
+      isPulling,
+      lastPushTime,
+      lastPullTime
+    }}>
       {children}
     </ExpenseContext.Provider>
   );
