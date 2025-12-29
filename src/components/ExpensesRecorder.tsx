@@ -25,6 +25,9 @@ const ExpensesRecorder = () => {
     return knownShops.filter(s => s.toLowerCase().includes(q)).slice(0, 8);
   }, [knownShops, shop]);
   const [paymentMode, setPaymentMode] = useState('');
+  const [globalCategory, setGlobalCategory] = useState('');
+  const [globalSubCategory, setGlobalSubCategory] = useState('');
+  const [globalLabels, setGlobalLabels] = useState<string[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [itemName, setItemName] = useState('');
   const [itemPrice, setItemPrice] = useState('');
@@ -33,6 +36,7 @@ const ExpensesRecorder = () => {
   const [itemLabels, setItemLabels] = useState<string[]>([]);
   const [itemNotes, setItemNotes] = useState('');
   const [showLabelsPopup, setShowLabelsPopup] = useState(false);
+  const [labelsPopupMode, setLabelsPopupMode] = useState<'item' | 'global'>('item');
   const [showReceiptsPopup, setShowReceiptsPopup] = useState(false);
   const [editingReceipt, setEditingReceipt] = useState<Receipt | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -85,13 +89,18 @@ const ExpensesRecorder = () => {
   };
 
   const addItem = () => {
-    if (!itemName || !itemPrice || !itemCategory) return;
+    // Use global defaults if item-level values are not set
+    const finalCategory = itemCategory || globalCategory;
+    const finalSubCategory = itemSubCategory || globalSubCategory;
+    const finalLabels = itemLabels.length > 0 ? itemLabels : globalLabels;
+    
+    if (!itemName || !itemPrice || !finalCategory) return;
     const baseItem = {
       name: itemName,
       price: parseFloat(itemPrice),
-      category: itemCategory,
-      subCategory: itemSubCategory,
-      labels: itemLabels,
+      category: finalCategory,
+      subCategory: finalSubCategory,
+      labels: finalLabels,
     } as Item;
     const newItem: Item = itemNotes.trim()
       ? { ...baseItem, notes: itemNotes }
@@ -118,6 +127,9 @@ const ExpensesRecorder = () => {
     setShop('');
     setDate(new Date().toISOString().split('T')[0]);
     setPaymentMode('');
+    setGlobalCategory('');
+    setGlobalSubCategory('');
+    setGlobalLabels([]);
     setItems([]);
   };
 
@@ -203,6 +215,46 @@ const ExpensesRecorder = () => {
               <button type="button" onClick={handleAddNewPaymentMode} className="add-inline-btn">➕ Add New</button>
             </div>
           </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Global Category</label>
+              <select 
+                value={globalCategory} 
+                onChange={e => { setGlobalCategory(e.target.value); setGlobalSubCategory(''); }}
+              >
+                <option value="">No Default Category</option>
+                {Object.keys(categoryData.categories).map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+              <button type="button" onClick={() => { const name = prompt('Enter new category'); const trimmed = (name || '').trim(); if (!trimmed) return; addCategory(trimmed); setGlobalCategory(trimmed); setGlobalSubCategory(''); }} className="add-inline-btn">➕ Add New</button>
+            </div>
+            <div className="form-group">
+              <label>Global Sub-Category</label>
+              <select 
+                value={globalSubCategory} 
+                onChange={e => setGlobalSubCategory(e.target.value)}
+                disabled={!globalCategory}
+              >
+                <option value="">No Default Sub-Category</option>
+                {(categoryData.categories[globalCategory] || []).map(sub => (
+                  <option key={sub} value={sub}>{sub}</option>
+                ))}
+              </select>
+              <button type="button" onClick={() => { if (!globalCategory) { alert('Please select a category first'); return; } const name = prompt(`Enter new sub-category for "${globalCategory}"`); const trimmed = (name || '').trim(); if (!trimmed) return; addSubCategory(globalCategory, trimmed); setGlobalSubCategory(trimmed); }} className="add-inline-btn" disabled={!globalCategory}>➕ Add New</button>
+            </div>
+            <div className="form-group">
+              <label>Global Labels</label>
+              <button 
+                type="button"
+                onClick={() => { setLabelsPopupMode('global'); setShowLabelsPopup(true); }} 
+                className="labels-btn"
+              >
+                🏷️ Select Labels {globalLabels.length > 0 && `(${globalLabels.length})`}
+              </button>
+              <button type="button" onClick={() => { const name = prompt('Enter new label'); const trimmed = (name || '').trim(); if (!trimmed) return; addLabel(trimmed); setGlobalLabels(prev => (prev.includes(trimmed) ? prev : [...prev, trimmed])); }} className="add-inline-btn">➕ Add Label</button>
+            </div>
+          </div>
         </div>
 
         <div className="add-items-section">
@@ -262,7 +314,7 @@ const ExpensesRecorder = () => {
                 <label>Labels</label>
                 <button 
                   type="button"
-                  onClick={() => setShowLabelsPopup(true)} 
+                  onClick={() => { setLabelsPopupMode('item'); setShowLabelsPopup(true); }} 
                   className="labels-btn"
                 >
                   🏷️ Select Labels {itemLabels.length > 0 && `(${itemLabels.length})`}
@@ -576,15 +628,25 @@ const ExpensesRecorder = () => {
         <>
           <div className="labels-modal-overlay" onClick={() => setShowLabelsPopup(false)} />
           <div className="labels-modal">
-            <h3>🏷️ Select Labels</h3>
+            <h3>🏷️ Select {labelsPopupMode === 'global' ? 'Global ' : ''}Labels</h3>
             <div className="labels-grid">
               {categoryData.labels.map(label => (
                 <div key={label} className="label-checkbox">
                   <input
                     type="checkbox"
                     id={`label-${label}`}
-                    checked={itemLabels.includes(label)}
-                    onChange={e => handleLabelChange(label, e.target.checked)}
+                    checked={labelsPopupMode === 'global' ? globalLabels.includes(label) : itemLabels.includes(label)}
+                    onChange={e => {
+                      if (labelsPopupMode === 'global') {
+                        if (e.target.checked) {
+                          setGlobalLabels(prev => [...prev, label]);
+                        } else {
+                          setGlobalLabels(prev => prev.filter(l => l !== label));
+                        }
+                      } else {
+                        handleLabelChange(label, e.target.checked);
+                      }
+                    }}
                   />
                   <label htmlFor={`label-${label}`}>{label}</label>
                 </div>
