@@ -5,6 +5,7 @@ export interface Item {
   subCategory: string;
   labels: string[];
   notes?: string;
+  gst?: number;
 }
 
 export interface Receipt {
@@ -13,6 +14,7 @@ export interface Receipt {
   shop: string;
   items: Item[];
   paymentMode?: string;
+  gst?: number;
 }
 
 export interface CategoryData {

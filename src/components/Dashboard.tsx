@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { Receipt, Item } from '../types';
 import { useExpense } from '../context/ExpenseContext';
 import EditReceipt from './EditReceipt';
@@ -34,6 +34,15 @@ const Dashboard = () => {
   const [showReceiptSubFilters, setShowReceiptSubFilters] = useState(false);
   const [showReceiptLabelFilters, setShowReceiptLabelFilters] = useState(false);
   const [showReceiptPaymentModeFilters, setShowReceiptPaymentModeFilters] = useState(false);
+  const [roundingMode, setRoundingMode] = useState<'none' | 'up' | 'down'>('none');
+
+  // Load rounding preference from localStorage set on Record Expenses page
+  useEffect(() => {
+    const saved = localStorage.getItem('roundingMode');
+    if (saved === 'none' || saved === 'up' || saved === 'down') {
+      setRoundingMode(saved as 'none' | 'up' | 'down');
+    }
+  }, []);
 
   const handlePush = async () => {
     try {
@@ -646,11 +655,22 @@ const Dashboard = () => {
                 if (!searchQuery) return true;
                 const query = searchQuery.toLowerCase();
                 
+                // Calculate total for search (GST-inclusive)
+                const totalAmount = r.items.reduce((sum, item) => {
+                  const rate = typeof item.gst === 'number' ? item.gst : (typeof r.gst === 'number' ? r.gst : 0);
+                  return sum + item.price * (1 + rate / 100);
+                }, 0);
+                
                 // Search in shop name
                 if (r.shop.toLowerCase().includes(query)) return true;
                 
-                // Search in date
+                // Search in date (both original format and display format)
                 if (r.date && r.date.includes(query)) return true;
+                if (r.date && r.date.split('-').reverse().join('-').includes(query)) return true;
+                
+                // Search in total amount
+                if (totalAmount.toString().includes(query)) return true;
+                if (totalAmount.toFixed(2).includes(query)) return true;
                 
                 // Search in payment mode
                 if (r.paymentMode && r.paymentMode.toLowerCase().includes(query)) return true;
@@ -665,12 +685,16 @@ const Dashboard = () => {
                 );
               })
               .map(r => {
-                const totalAmount = r.items.reduce((sum, item) => sum + item.price, 0);
+                const rawTotal = r.items.reduce((sum, item) => {
+                  const rate = typeof item.gst === 'number' ? item.gst : (typeof r.gst === 'number' ? r.gst : 0);
+                  return sum + item.price * (1 + rate / 100);
+                }, 0);
+                const roundedTotal = roundingMode === 'up' ? Math.ceil(rawTotal) : roundingMode === 'down' ? Math.floor(rawTotal) : rawTotal;
                 return (
               <div key={r.id} className="receipt-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <h3>🛒 {r.shop} - {r.date ? r.date.split('-').reverse().join('-') : ''} - ₹{totalAmount.toFixed(2)}</h3>
+                    <h3>🛒 {r.shop} - {r.date ? r.date.split('-').reverse().join('-') : ''} - ₹{roundedTotal.toFixed(2)}</h3>
                     {r.paymentMode && (
                       <div style={{ fontSize: '0.9em', opacity: 0.8, marginTop: '0.25rem' }}>
                         💳 {r.paymentMode}

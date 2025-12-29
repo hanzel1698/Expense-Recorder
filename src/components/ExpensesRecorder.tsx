@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useExpense } from '../context/ExpenseContext';
 import type { Item, Receipt } from '../types';
 import EditReceipt from './EditReceipt';
@@ -28,6 +28,7 @@ const ExpensesRecorder = () => {
   const [globalCategory, setGlobalCategory] = useState('');
   const [globalSubCategory, setGlobalSubCategory] = useState('');
   const [globalLabels, setGlobalLabels] = useState<string[]>([]);
+  const [globalGst, setGlobalGst] = useState<number | ''>('');
   const [items, setItems] = useState<Item[]>([]);
   const [itemName, setItemName] = useState('');
   const [itemPrice, setItemPrice] = useState('');
@@ -35,6 +36,20 @@ const ExpensesRecorder = () => {
   const [itemSubCategory, setItemSubCategory] = useState('');
   const [itemLabels, setItemLabels] = useState<string[]>([]);
   const [itemNotes, setItemNotes] = useState('');
+  const [itemGst, setItemGst] = useState<number | ''>('');
+  const [roundingMode, setRoundingMode] = useState<'none' | 'up' | 'down'>('none');
+
+  // Persist rounding mode to localStorage and restore on load
+  useEffect(() => {
+    const saved = localStorage.getItem('roundingMode');
+    if (saved === 'none' || saved === 'up' || saved === 'down') {
+      setRoundingMode(saved as 'none' | 'up' | 'down');
+    }
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem('roundingMode', roundingMode); } catch {}
+  }, [roundingMode]);
   const [showLabelsPopup, setShowLabelsPopup] = useState(false);
   const [labelsPopupMode, setLabelsPopupMode] = useState<'item' | 'global'>('item');
   const [showReceiptsPopup, setShowReceiptsPopup] = useState(false);
@@ -93,6 +108,7 @@ const ExpensesRecorder = () => {
     const finalCategory = itemCategory || globalCategory;
     const finalSubCategory = itemSubCategory || globalSubCategory;
     const finalLabels = itemLabels.length > 0 ? itemLabels : globalLabels;
+    const finalGst = itemGst !== '' ? itemGst : globalGst;
     
     if (!itemName || !itemPrice || !finalCategory) return;
     const baseItem = {
@@ -102,6 +118,12 @@ const ExpensesRecorder = () => {
       subCategory: finalSubCategory,
       labels: finalLabels,
     } as Item;
+    
+    // Add GST if set
+    if (finalGst !== '' && finalGst !== undefined) {
+      baseItem.gst = typeof finalGst === 'number' ? finalGst : parseFloat(String(finalGst));
+    }
+    
     const newItem: Item = itemNotes.trim()
       ? { ...baseItem, notes: itemNotes }
       : baseItem;
@@ -112,6 +134,7 @@ const ExpensesRecorder = () => {
     setItemSubCategory('');
     setItemLabels([]);
     setItemNotes('');
+    setItemGst('');
   };
 
   const saveReceipt = () => {
@@ -121,7 +144,8 @@ const ExpensesRecorder = () => {
       date: date,
       shop,
       items,
-      ...(paymentMode ? { paymentMode } : {})
+      ...(paymentMode ? { paymentMode } : {}),
+      ...(globalGst !== '' ? { gst: typeof globalGst === 'number' ? globalGst : parseFloat(String(globalGst)) } : {})
     };
     addReceipt(receipt);
     setShop('');
@@ -130,6 +154,7 @@ const ExpensesRecorder = () => {
     setGlobalCategory('');
     setGlobalSubCategory('');
     setGlobalLabels([]);
+    setGlobalGst('');
     setItems([]);
   };
 
@@ -147,6 +172,24 @@ const ExpensesRecorder = () => {
     if (endDate && d > endDate) return false;
     return true;
   });
+
+  // Live GST-inclusive total for current in-progress receipt
+  const computedTotal = useMemo(() => {
+    try {
+      return items.reduce((sum, item) => {
+        const rate = typeof item.gst === 'number' ? item.gst : (typeof globalGst === 'number' ? globalGst : 0);
+        return sum + item.price * (1 + rate / 100);
+      }, 0);
+    } catch {
+      return 0;
+    }
+  }, [items, globalGst]);
+
+  const displayedTotal = useMemo(() => {
+    if (roundingMode === 'up') return Math.ceil(computedTotal);
+    if (roundingMode === 'down') return Math.floor(computedTotal);
+    return computedTotal;
+  }, [computedTotal, roundingMode]);
 
   const subCategoryOptions = Array.from(
     new Set(
@@ -255,6 +298,32 @@ const ExpensesRecorder = () => {
               <button type="button" onClick={() => { const name = prompt('Enter new label'); const trimmed = (name || '').trim(); if (!trimmed) return; addLabel(trimmed); setGlobalLabels(prev => (prev.includes(trimmed) ? prev : [...prev, trimmed])); }} className="add-inline-btn">➕ Add Label</button>
             </div>
           </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Global GST %</label>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                {[0, 5, 12, 18, 28, 40].map(rate => (
+                  <button
+                    key={rate}
+                    type="button"
+                    onClick={() => setGlobalGst(rate)}
+                    className={globalGst === rate ? 'gst-btn active' : 'gst-btn'}
+                  >
+                    {rate}%
+                  </button>
+                ))}
+              </div>
+              <input 
+                type="number" 
+                placeholder="Custom GST %" 
+                value={globalGst} 
+                onChange={e => setGlobalGst(e.target.value === '' ? '' : parseFloat(e.target.value))} 
+                step="0.01"
+                min="0"
+                max="100"
+              />
+            </div>
+          </div>
         </div>
 
         <div className="add-items-section">
@@ -279,6 +348,30 @@ const ExpensesRecorder = () => {
                   onChange={e => setItemPrice(e.target.value)} 
                   step="0.01"
                   min="0"
+                />
+              </div>
+              <div className="form-group">
+                <label>GST %</label>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                  {[0, 5, 12, 18, 28, 40].map(rate => (
+                    <button
+                      key={rate}
+                      type="button"
+                      onClick={() => setItemGst(rate)}
+                      className={itemGst === rate ? 'gst-btn active' : 'gst-btn'}
+                    >
+                      {rate}%
+                    </button>
+                  ))}
+                </div>
+                <input 
+                  type="number" 
+                  placeholder="Custom or leave blank" 
+                  value={itemGst} 
+                  onChange={e => setItemGst(e.target.value === '' ? '' : parseFloat(e.target.value))} 
+                  step="0.01"
+                  min="0"
+                  max="100"
                 />
               </div>
             </div>
@@ -347,7 +440,14 @@ const ExpensesRecorder = () => {
                 <li key={idx} className="item-card">
                   <div className="item-details">
                     <div className="item-name">{i.name}</div>
-                    <div className="item-price">₹{i.price.toFixed(2)}</div>
+                    <div className="item-price">
+                      ₹{i.price.toFixed(2)}
+                      {i.gst !== undefined && i.gst !== null && (
+                        <span style={{ fontSize: '0.85em', opacity: 0.7, marginLeft: '0.5rem' }}>
+                          (GST: {i.gst}%)
+                        </span>
+                      )}
+                    </div>
                     <div className="item-meta">
                       {i.category} / {i.subCategory}
                     </div>
@@ -372,6 +472,23 @@ const ExpensesRecorder = () => {
               No items added yet. Add items above to start building your receipt.
             </div>
           )}
+        </div>
+
+        <div className="items-total-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem' }}>
+          <div style={{ fontWeight: 700 }}>
+            Total: ₹{displayedTotal.toFixed(2)}
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button type="button" className="add-inline-btn" onClick={() => setRoundingMode('none')} title="Show exact total">
+              Exact
+            </button>
+            <button type="button" className="add-inline-btn" onClick={() => setRoundingMode('up')} title="Round up to next rupee">
+              Round Up
+            </button>
+            <button type="button" className="add-inline-btn" onClick={() => setRoundingMode('down')} title="Round down to previous rupee">
+              Round Down
+            </button>
+          </div>
         </div>
 
         <button 
@@ -534,11 +651,22 @@ const ExpensesRecorder = () => {
                 if (!searchQuery) return true;
                 const query = searchQuery.toLowerCase();
                 
+                // Calculate total for search (GST-inclusive)
+                const totalAmount = r.items.reduce((sum, item) => {
+                  const rate = typeof item.gst === 'number' ? item.gst : (typeof r.gst === 'number' ? r.gst : 0);
+                  return sum + item.price * (1 + rate / 100);
+                }, 0);
+                
                 // Search in shop name
                 if (r.shop.toLowerCase().includes(query)) return true;
                 
-                // Search in date
+                // Search in date (both original format and display format)
                 if (r.date && r.date.includes(query)) return true;
+                if (r.date && r.date.split('-').reverse().join('-').includes(query)) return true;
+                
+                // Search in total amount
+                if (totalAmount.toString().includes(query)) return true;
+                if (totalAmount.toFixed(2).includes(query)) return true;
                 
                 // Search in payment mode
                 if (r.paymentMode && r.paymentMode.toLowerCase().includes(query)) return true;
@@ -553,12 +681,16 @@ const ExpensesRecorder = () => {
                 );
               })
               .map(r => {
-                const totalAmount = r.items.reduce((sum, item) => sum + item.price, 0);
+                const rawTotal = r.items.reduce((sum, item) => {
+                  const rate = typeof item.gst === 'number' ? item.gst : (typeof r.gst === 'number' ? r.gst : 0);
+                  return sum + item.price * (1 + rate / 100);
+                }, 0);
+                const roundedTotal = roundingMode === 'up' ? Math.ceil(rawTotal) : roundingMode === 'down' ? Math.floor(rawTotal) : rawTotal;
                 return (
               <div key={r.id} className="receipt-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <h3>🛒 {r.shop} - {r.date ? r.date.split('-').reverse().join('-') : ''} - ₹{totalAmount.toFixed(2)}</h3>
+                    <h3>🛒 {r.shop} - {r.date ? r.date.split('-').reverse().join('-') : ''} - ₹{roundedTotal.toFixed(2)}</h3>
                     {r.paymentMode && (
                       <div style={{ fontSize: '0.9em', opacity: 0.8, marginTop: '0.25rem' }}>
                         💳 {r.paymentMode}
