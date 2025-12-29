@@ -664,11 +664,13 @@ const Dashboard = () => {
                   item.labels.some(label => label.toLowerCase().includes(query))
                 );
               })
-              .map(r => (
+              .map(r => {
+                const totalAmount = r.items.reduce((sum, item) => sum + item.price, 0);
+                return (
               <div key={r.id} className="receipt-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <h3>🛒 {r.shop} - {r.date ? r.date.split('-').reverse().join('-') : ''}</h3>
+                    <h3>🛒 {r.shop} - {r.date ? r.date.split('-').reverse().join('-') : ''} - ₹{totalAmount.toFixed(2)}</h3>
                     {r.paymentMode && (
                       <div style={{ fontSize: '0.9em', opacity: 0.8, marginTop: '0.25rem' }}>
                         💳 {r.paymentMode}
@@ -720,7 +722,8 @@ const Dashboard = () => {
                     ))}
                 </ul>
               </div>
-            ))}
+                );
+              })}
 
             <button onClick={() => setShowReceiptsPopup(false)} className="modal-close-btn">
               Close
