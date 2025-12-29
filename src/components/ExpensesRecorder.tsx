@@ -1,13 +1,29 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useExpense } from '../context/ExpenseContext';
 import type { Item, Receipt } from '../types';
 import EditReceipt from './EditReceipt';
 import './ExpensesRecorder.css';
 
 const ExpensesRecorder = () => {
-  const { addReceipt, categoryData, receipts, deleteReceipt } = useExpense();
+  const { addReceipt, categoryData, receipts, deleteReceipt, addPaymentMode, addCategory, addSubCategory, addLabel } = useExpense();
   const [shop, setShop] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const knownShops = useMemo(() => {
+    try {
+      const set = new Set<string>();
+      for (const r of receipts) {
+        if (r.shop) set.add(r.shop);
+      }
+      return Array.from(set).sort((a, b) => a.localeCompare(b));
+    } catch {
+      return [] as string[];
+    }
+  }, [receipts]);
+  const filteredShopSuggestions = useMemo(() => {
+    const q = shop.trim().toLowerCase();
+    if (!q) return [] as string[];
+    return knownShops.filter(s => s.toLowerCase().includes(q)).slice(0, 8);
+  }, [knownShops, shop]);
   const [paymentMode, setPaymentMode] = useState('');
   const [items, setItems] = useState<Item[]>([]);
   const [itemName, setItemName] = useState('');
@@ -30,6 +46,43 @@ const ExpensesRecorder = () => {
   const [showReceiptSubFilters, setShowReceiptSubFilters] = useState(false);
   const [showReceiptLabelFilters, setShowReceiptLabelFilters] = useState(false);
   const [showReceiptPaymentModeFilters, setShowReceiptPaymentModeFilters] = useState(false);
+
+  const handleAddNewPaymentMode = () => {
+    const name = prompt('Enter new payment mode');
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    addPaymentMode(trimmed);
+    setPaymentMode(trimmed);
+  };
+
+  const handleAddNewCategory = () => {
+    const name = prompt('Enter new category');
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    addCategory(trimmed);
+    setItemCategory(trimmed);
+    setItemSubCategory('');
+  };
+
+  const handleAddNewSubCategory = () => {
+    if (!itemCategory) {
+      alert('Please select a category first');
+      return;
+    }
+    const name = prompt(`Enter new sub-category for "${itemCategory}"`);
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    addSubCategory(itemCategory, trimmed);
+    setItemSubCategory(trimmed);
+  };
+
+  const handleAddNewLabel = () => {
+    const name = prompt('Enter new label');
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    addLabel(trimmed);
+    setItemLabels(prev => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+  };
 
   const addItem = () => {
     if (!itemName || !itemPrice || !itemCategory) return;
@@ -110,6 +163,20 @@ const ExpensesRecorder = () => {
                 value={shop} 
                 onChange={e => setShop(e.target.value)} 
               />
+              {shop && filteredShopSuggestions.length > 0 && (
+                <ul className="suggestions-list" role="listbox" aria-label="Shop suggestions">
+                  {filteredShopSuggestions.map((s) => (
+                    <li
+                      key={s}
+                      className="suggestion-item"
+                      role="option"
+                      onMouseDown={() => setShop(s)}
+                    >
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             <div className="form-group">
               <label htmlFor="date-input">Date</label>
@@ -131,6 +198,7 @@ const ExpensesRecorder = () => {
                   <option key={mode} value={mode}>{mode}</option>
                 ))}
               </select>
+              <button type="button" onClick={handleAddNewPaymentMode} className="add-inline-btn">➕ Add New</button>
             </div>
           </div>
         </div>
@@ -172,6 +240,7 @@ const ExpensesRecorder = () => {
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
+                <button type="button" onClick={handleAddNewCategory} className="add-inline-btn">➕ Add New</button>
               </div>
               <div className="form-group">
                 <label>Sub Category</label>
@@ -185,6 +254,7 @@ const ExpensesRecorder = () => {
                     <option key={sub} value={sub}>{sub}</option>
                   ))}
                 </select>
+                <button type="button" onClick={handleAddNewSubCategory} className="add-inline-btn" disabled={!itemCategory}>➕ Add New</button>
               </div>
               <div className="form-group">
                 <label>Labels</label>
@@ -195,6 +265,7 @@ const ExpensesRecorder = () => {
                 >
                   🏷️ Select Labels {itemLabels.length > 0 && `(${itemLabels.length})`}
                 </button>
+                <button type="button" onClick={handleAddNewLabel} className="add-inline-btn">➕ Add Label</button>
               </div>
             </div>
             <div className="item-form-row-full">

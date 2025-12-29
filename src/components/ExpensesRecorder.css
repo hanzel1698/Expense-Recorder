@@ -71,6 +71,29 @@
   font-size: 0.95rem;
 }
 
+/* Shop suggestions */
+.suggestions-list {
+  list-style: none;
+  margin: 4px 0 0 0;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  max-height: 160px;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px var(--shadow);
+}
+
+.suggestion-item {
+  padding: 6px 8px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.suggestion-item:hover {
+  background: var(--bg-secondary);
+}
+
 /* Remove spinner arrows from number inputs */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
@@ -142,6 +165,23 @@ input[type="number"] {
 
 .labels-btn:hover {
   box-shadow: 0 6px 16px rgba(236, 72, 153, 0.4);
+}
+
+.add-inline-btn {
+  margin-top: 0.25rem;
+  padding: 0.35rem 0.6rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  width: fit-content;
+}
+
+.add-inline-btn:hover {
+  background: rgba(99, 102, 241, 0.06);
+  border-color: var(--primary-light);
 }
 
 .add-item-btn {
