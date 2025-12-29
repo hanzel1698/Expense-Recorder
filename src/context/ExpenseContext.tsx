@@ -49,6 +49,13 @@ export const ExpenseProvider: React.FC<{ children: ReactNode }> = ({ children })
   const BACKUP_KEY = 'expenseRecorder.backup';
   const AUTO_BACKUP_KEY = 'expenseRecorder.autoBackup';
 
+  // Remove all undefined values so Firestore accepts the payload
+  const sanitizeForFirestore = <T,>(data: T): T => {
+    // JSON round-trip drops undefined values in objects and converts undefined in arrays to null.
+    // Prefer dropping undefined keys entirely for Firestore; acceptable for our shapes.
+    return JSON.parse(JSON.stringify(data));
+  };
+
   const defaultCategoryData: CategoryData = {
     categories: {
       Uncategorized: [],
@@ -361,8 +368,8 @@ export const ExpenseProvider: React.FC<{ children: ReactNode }> = ({ children })
       // Use setDoc without merge to completely overwrite with local data
       // This ensures deletions are reflected in Firestore
       await setDoc(userDocRef, {
-        receipts,
-        categoryData,
+        receipts: sanitizeForFirestore(receipts),
+        categoryData: sanitizeForFirestore(categoryData),
         updatedAt: new Date().toISOString(),
       });
       
