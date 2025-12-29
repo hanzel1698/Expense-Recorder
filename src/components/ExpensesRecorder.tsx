@@ -8,6 +8,7 @@ const ExpensesRecorder = () => {
   const { addReceipt, categoryData, receipts, deleteReceipt } = useExpense();
   const [shop, setShop] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentMode, setPaymentMode] = useState('');
   const [items, setItems] = useState<Item[]>([]);
   const [itemName, setItemName] = useState('');
   const [itemPrice, setItemPrice] = useState('');
@@ -24,9 +25,11 @@ const ExpensesRecorder = () => {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedSubCategories, setSelectedSubCategories] = useState<string[]>([]);
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
+  const [selectedPaymentModes, setSelectedPaymentModes] = useState<string[]>([]);
   const [showReceiptCategoryFilters, setShowReceiptCategoryFilters] = useState(false);
   const [showReceiptSubFilters, setShowReceiptSubFilters] = useState(false);
   const [showReceiptLabelFilters, setShowReceiptLabelFilters] = useState(false);
+  const [showReceiptPaymentModeFilters, setShowReceiptPaymentModeFilters] = useState(false);
 
   const addItem = () => {
     if (!itemName || !itemPrice || !itemCategory) return;
@@ -53,11 +56,13 @@ const ExpensesRecorder = () => {
       id: Date.now().toString(),
       date: date,
       shop,
-      items
+      items,
+      paymentMode: paymentMode || undefined
     };
     addReceipt(receipt);
     setShop('');
     setDate(new Date().toISOString().split('T')[0]);
+    setPaymentMode('');
     setItems([]);
   };
 
@@ -114,6 +119,18 @@ const ExpensesRecorder = () => {
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />
+            </div>
+            <div className="form-group">
+              <label>Payment Mode</label>
+              <select 
+                value={paymentMode} 
+                onChange={e => setPaymentMode(e.target.value)}
+              >
+                <option value="">Select Payment Mode</option>
+                {categoryData.paymentModes.map(mode => (
+                  <option key={mode} value={mode}>{mode}</option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
@@ -276,6 +293,9 @@ const ExpensesRecorder = () => {
                 <button onClick={() => setShowReceiptLabelFilters((v) => !v)} className="filter-btn">
                   🏷️ Labels
                 </button>
+                <button onClick={() => setShowReceiptPaymentModeFilters((v) => !v)} className="filter-btn">
+                  💳 Payment Modes
+                </button>
                 <button 
                   onClick={() => { 
                     setSearchQuery('');
@@ -284,6 +304,7 @@ const ExpensesRecorder = () => {
                     setSelectedCategories([]); 
                     setSelectedSubCategories([]); 
                     setSelectedLabels([]); 
+                    setSelectedPaymentModes([]);
                   }}
                   className="clear-btn"
                 >
@@ -358,8 +379,33 @@ const ExpensesRecorder = () => {
               </div>
             )}
 
+            {showReceiptPaymentModeFilters && (
+              <div className="filter-options">
+                {categoryData.paymentModes.map((mode) => (
+                  <div key={mode} className="filter-option">
+                    <input
+                      type="checkbox"
+                      id={`receipt-mode-${mode}`}
+                      checked={selectedPaymentModes.includes(mode)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedPaymentModes((prev) => [...prev, mode]);
+                        } else {
+                          setSelectedPaymentModes((prev) => prev.filter((m) => m !== mode));
+                        }
+                      }}
+                    />
+                    <label htmlFor={`receipt-mode-${mode}`}>{mode}</label>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {filteredReceipts
               .filter(r => {
+                // Filter by payment mode
+                if (selectedPaymentModes.length && (!r.paymentMode || !selectedPaymentModes.includes(r.paymentMode))) return false;
+                
                 if (!searchQuery) return true;
                 const query = searchQuery.toLowerCase();
                 
@@ -368,6 +414,9 @@ const ExpensesRecorder = () => {
                 
                 // Search in date
                 if (r.date && r.date.includes(query)) return true;
+                
+                // Search in payment mode
+                if (r.paymentMode && r.paymentMode.toLowerCase().includes(query)) return true;
                 
                 // Search in items
                 return r.items.some(item => 
@@ -381,7 +430,14 @@ const ExpensesRecorder = () => {
               .map(r => (
               <div key={r.id} className="receipt-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3>🛒 {r.shop} - {r.date ? r.date.split('-').reverse().join('-') : ''}</h3>
+                  <div>
+                    <h3>🛒 {r.shop} - {r.date ? r.date.split('-').reverse().join('-') : ''}</h3>
+                    {r.paymentMode && (
+                      <div style={{ fontSize: '0.9em', opacity: 0.8, marginTop: '0.25rem' }}>
+                        💳 {r.paymentMode}
+                      </div>
+                    )}
+                  </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button 
                       onClick={() => setEditingReceipt(r)}

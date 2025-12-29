@@ -3,11 +3,12 @@ import { useExpense } from '../context/ExpenseContext';
 import './Settings.css';
 
 const Settings = () => {
-  const { receipts, categoryData, addCategory, addSubCategory, addLabel, resetAll, updateCategory, updateSubCategory, updateLabel, removeCategory, removeSubCategory, removeLabel } = useExpense();
+  const { receipts, categoryData, addCategory, addSubCategory, addLabel, addPaymentMode, resetAll, updateCategory, updateSubCategory, updateLabel, updatePaymentMode, removeCategory, removeSubCategory, removeLabel, removePaymentMode } = useExpense();
   const [newCategory, setNewCategory] = useState('');
   const [selectedCategoryForSub, setSelectedCategoryForSub] = useState('');
   const [newSubCategory, setNewSubCategory] = useState('');
   const [newLabel, setNewLabel] = useState('');
+  const [newPaymentMode, setNewPaymentMode] = useState('');
   const [resetNotice, setResetNotice] = useState('');
 
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
@@ -30,6 +31,12 @@ const Settings = () => {
   const [deletingLabel, setDeletingLabel] = useState<string | null>(null);
   const labelUsage = (label: string) => receipts.reduce((count, r) => count + r.items.filter(i => i.labels.includes(label)).length, 0);
 
+  const [editingPaymentMode, setEditingPaymentMode] = useState<string | null>(null);
+  const [editingPaymentModeValue, setEditingPaymentModeValue] = useState('');
+  const [paymentModeEditError, setPaymentModeEditError] = useState('');
+  const [deletingPaymentMode, setDeletingPaymentMode] = useState<string | null>(null);
+  const paymentModeUsage = (mode: string) => receipts.reduce((count, r) => count + (r.paymentMode === mode ? 1 : 0), 0);
+
   const handleAddCategory = () => {
     if (newCategory.trim()) {
       addCategory(newCategory.trim());
@@ -48,6 +55,13 @@ const Settings = () => {
     if (newLabel.trim()) {
       addLabel(newLabel.trim());
       setNewLabel('');
+    }
+  };
+
+  const handleAddPaymentMode = () => {
+    if (newPaymentMode.trim()) {
+      addPaymentMode(newPaymentMode.trim());
+      setNewPaymentMode('');
     }
   };
 
@@ -291,6 +305,59 @@ const Settings = () => {
       </ul>
       <input type="text" placeholder="New Label" value={newLabel} onChange={e => setNewLabel(e.target.value)} />
       <button onClick={handleAddLabel}>Add Label</button>
+
+      <h2>Payment Modes</h2>
+      <ul className="category-list">
+        {categoryData.paymentModes.map((mode) => (
+          <li
+            key={mode}
+            className="category-item"
+          >
+            {editingPaymentMode === mode ? (
+              <div className="edit-controls">
+                <input value={editingPaymentModeValue} onChange={e => setEditingPaymentModeValue(e.target.value)} />
+                {paymentModeEditError && (<span className="error-text">{paymentModeEditError}</span>)}
+                <button onClick={() => {
+                  const trimmed = editingPaymentModeValue.trim();
+                  setPaymentModeEditError('');
+                  if (!trimmed) { setPaymentModeEditError('Payment mode cannot be empty'); return; }
+                  if (trimmed === mode) { setPaymentModeEditError('No changes to save'); return; }
+                  if (categoryData.paymentModes.includes(trimmed)) { setPaymentModeEditError('Payment mode already exists'); return; }
+                  if (confirm(`Rename payment mode "${mode}" to "${trimmed}"?`)) {
+                    updatePaymentMode(mode, trimmed);
+                    setEditingPaymentMode(null);
+                  }
+                }}>Save</button>
+                <button onClick={() => { setEditingPaymentMode(null); setPaymentModeEditError(''); }}>Cancel</button>
+              </div>
+            ) : (
+              <div className="item-header">
+                <div className="item-title">
+                  <span>{mode}</span>
+                  <button onClick={() => { setEditingPaymentMode(mode); setEditingPaymentModeValue(mode); }} title="Edit">✏️</button>
+                </div>
+                <div className="item-actions">
+                  <button onClick={() => setDeletingPaymentMode(mode)} title="Delete">🗑️</button>
+                </div>
+              </div>
+            )}
+            <div className="usage-info">Usage: {paymentModeUsage(mode)} receipts</div>
+            {deletingPaymentMode === mode ? (
+              <div className="delete-dialog">
+                <button onClick={() => {
+                  if (confirm(`Delete payment mode "${mode}" and remove it from all receipts?`)) {
+                    removePaymentMode(mode);
+                    setDeletingPaymentMode(null);
+                  }
+                }}>Confirm Delete</button>
+                <button style={{ marginLeft: 8 }} onClick={() => setDeletingPaymentMode(null)}>Cancel</button>
+              </div>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      <input type="text" placeholder="New Payment Mode" value={newPaymentMode} onChange={e => setNewPaymentMode(e.target.value)} />
+      <button onClick={handleAddPaymentMode}>Add Payment Mode</button>
 
       <hr style={{ margin: '20px 0' }} />
       <h2>Data Backup</h2>

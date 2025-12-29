@@ -25,12 +25,15 @@ const Dashboard = () => {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedSubCategories, setSelectedSubCategories] = useState<string[]>([]);
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
+  const [selectedPaymentModes, setSelectedPaymentModes] = useState<string[]>([]);
   const [showChartCategoryFilters, setShowChartCategoryFilters] = useState(false);
   const [showChartSubFilters, setShowChartSubFilters] = useState(false);
   const [showChartLabelFilters, setShowChartLabelFilters] = useState(false);
+  const [showChartPaymentModeFilters, setShowChartPaymentModeFilters] = useState(false);
   const [showReceiptCategoryFilters, setShowReceiptCategoryFilters] = useState(false);
   const [showReceiptSubFilters, setShowReceiptSubFilters] = useState(false);
   const [showReceiptLabelFilters, setShowReceiptLabelFilters] = useState(false);
+  const [showReceiptPaymentModeFilters, setShowReceiptPaymentModeFilters] = useState(false);
 
   const handlePush = async () => {
     try {
@@ -79,6 +82,9 @@ const Dashboard = () => {
   const categoryAgg = useMemo(() => {
     const map = new Map<string, number>();
     for (const r of filteredReceipts) {
+      // Filter by payment mode at receipt level
+      if (selectedPaymentModes.length && (!r.paymentMode || !selectedPaymentModes.includes(r.paymentMode))) continue;
+      
       for (const i of r.items) {
         if (selectedCategories.length && !selectedCategories.includes(i.category)) continue;
         if (selectedSubCategories.length && !selectedSubCategories.includes(i.subCategory)) continue;
@@ -93,12 +99,15 @@ const Dashboard = () => {
       { name: 'Transportation', total: 0 },
       { name: 'Entertainment', total: 0 },
     ];
-  }, [filteredReceipts, selectedCategories]);
+  }, [filteredReceipts, selectedCategories, selectedPaymentModes]);
 
   // Aggregate totals by month (YYYY-MM)
   const monthlyAgg = useMemo(() => {
     const map = new Map<string, number>();
     for (const r of filteredReceipts) {
+      // Filter by payment mode at receipt level
+      if (selectedPaymentModes.length && (!r.paymentMode || !selectedPaymentModes.includes(r.paymentMode))) continue;
+      
       const key = (r.date || '').slice(0, 7); // YYYY-MM
       if (!key) continue;
       const subtotal = r.items.reduce((s, i) => {
@@ -121,12 +130,15 @@ const Dashboard = () => {
       ];
     }
     return arr;
-  }, [filteredReceipts, selectedCategories]);
+  }, [filteredReceipts, selectedCategories, selectedPaymentModes]);
 
   // Aggregate totals by subcategory
   const subCategoryAgg = useMemo(() => {
     const map = new Map<string, number>();
     for (const r of filteredReceipts) {
+      // Filter by payment mode at receipt level
+      if (selectedPaymentModes.length && (!r.paymentMode || !selectedPaymentModes.includes(r.paymentMode))) continue;
+      
       for (const i of r.items) {
         if (selectedCategories.length && !selectedCategories.includes(i.category)) continue;
         if (selectedSubCategories.length && !selectedSubCategories.includes(i.subCategory)) continue;
@@ -138,12 +150,15 @@ const Dashboard = () => {
     }
     const arr = Array.from(map.entries()).map(([name, total]) => ({ name, total }));
     return arr.length ? arr : [{ name: 'No Data', total: 0 }];
-  }, [filteredReceipts, selectedCategories, selectedSubCategories, selectedLabels]);
+  }, [filteredReceipts, selectedCategories, selectedSubCategories, selectedLabels, selectedPaymentModes]);
 
   // Aggregate totals by label
   const labelAgg = useMemo(() => {
     const map = new Map<string, number>();
     for (const r of filteredReceipts) {
+      // Filter by payment mode at receipt level
+      if (selectedPaymentModes.length && (!r.paymentMode || !selectedPaymentModes.includes(r.paymentMode))) continue;
+      
       for (const i of r.items) {
         if (selectedCategories.length && !selectedCategories.includes(i.category)) continue;
         if (selectedSubCategories.length && !selectedSubCategories.includes(i.subCategory)) continue;
@@ -155,7 +170,7 @@ const Dashboard = () => {
     }
     const arr = Array.from(map.entries()).map(([name, total]) => ({ name, total }));
     return arr.length ? arr : [{ name: 'No Data', total: 0 }];
-  }, [filteredReceipts, selectedCategories, selectedSubCategories, selectedLabels]);
+  }, [filteredReceipts, selectedCategories, selectedSubCategories, selectedLabels, selectedPaymentModes]);
 
   const chartData = chartView === 'category' ? categoryAgg : chartView === 'subcategory' ? subCategoryAgg : chartView === 'label' ? labelAgg : monthlyAgg;
   const xKey = chartView === 'month' ? 'month' : 'name';
@@ -180,6 +195,9 @@ const Dashboard = () => {
     if (!selectedBar) return [];
     const results: Array<{ receipt: Receipt; item: Item }> = [];
     for (const r of filteredReceipts) {
+      // Filter by payment mode at receipt level
+      if (selectedPaymentModes.length && (!r.paymentMode || !selectedPaymentModes.includes(r.paymentMode))) continue;
+      
       // month guard when needed
       if (selectedBar.type === 'month') {
         const monthKey = (r.date || '').slice(0, 7);
@@ -197,7 +215,7 @@ const Dashboard = () => {
       }
     }
     return results;
-  }, [filteredReceipts, selectedBar, selectedCategories, selectedSubCategories, selectedLabels]);
+  }, [filteredReceipts, selectedBar, selectedCategories, selectedSubCategories, selectedLabels, selectedPaymentModes]);
   // Custom label to show percentage on bars
   const renderBarLabel = (props: any) => {
     const { x, y, width, value } = props;
@@ -305,6 +323,9 @@ const Dashboard = () => {
             <button onClick={() => setShowChartLabelFilters((v) => !v)} className="filter-btn">
               🏷️ Labels
             </button>
+            <button onClick={() => setShowChartPaymentModeFilters((v) => !v)} className="filter-btn">
+              💳 Payment Modes
+            </button>
             <button 
               onClick={() => { 
                 setStartDate(''); 
@@ -312,6 +333,7 @@ const Dashboard = () => {
                 setSelectedCategories([]); 
                 setSelectedSubCategories([]); 
                 setSelectedLabels([]); 
+                setSelectedPaymentModes([]);
               }} 
               className="clear-btn"
             >
@@ -381,6 +403,28 @@ const Dashboard = () => {
                   }}
                 />
                 <label htmlFor={`chart-label-${label}`}>{label}</label>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showChartPaymentModeFilters && (
+          <div className="filter-options">
+            {categoryData.paymentModes.map((mode) => (
+              <div key={mode} className="filter-option">
+                <input
+                  type="checkbox"
+                  id={`chart-mode-${mode}`}
+                  checked={selectedPaymentModes.includes(mode)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedPaymentModes((prev) => [...prev, mode]);
+                    } else {
+                      setSelectedPaymentModes((prev) => prev.filter((m) => m !== mode));
+                    }
+                  }}
+                />
+                <label htmlFor={`chart-mode-${mode}`}>{mode}</label>
               </div>
             ))}
           </div>
@@ -482,6 +526,9 @@ const Dashboard = () => {
                 <button onClick={() => setShowReceiptLabelFilters((v) => !v)} className="filter-btn">
                   🏷️ Labels
                 </button>
+                <button onClick={() => setShowReceiptPaymentModeFilters((v) => !v)} className="filter-btn">
+                  💳 Payment Modes
+                </button>
                 <button 
                   onClick={() => { 
                     setSearchQuery('');
@@ -490,6 +537,7 @@ const Dashboard = () => {
                     setSelectedCategories([]); 
                     setSelectedSubCategories([]); 
                     setSelectedLabels([]); 
+                    setSelectedPaymentModes([]);
                   }}
                   className="clear-btn"
                 >
@@ -564,8 +612,33 @@ const Dashboard = () => {
               </div>
             )}
 
+            {showReceiptPaymentModeFilters && (
+              <div className="filter-options">
+                {categoryData.paymentModes.map((mode) => (
+                  <div key={mode} className="filter-option">
+                    <input
+                      type="checkbox"
+                      id={`receipt-mode-${mode}`}
+                      checked={selectedPaymentModes.includes(mode)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedPaymentModes((prev) => [...prev, mode]);
+                        } else {
+                          setSelectedPaymentModes((prev) => prev.filter((m) => m !== mode));
+                        }
+                      }}
+                    />
+                    <label htmlFor={`receipt-mode-${mode}`}>{mode}</label>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {filteredReceipts
               .filter(r => {
+                // Filter by payment mode
+                if (selectedPaymentModes.length && (!r.paymentMode || !selectedPaymentModes.includes(r.paymentMode))) return false;
+                
                 if (!searchQuery) return true;
                 const query = searchQuery.toLowerCase();
                 
@@ -574,6 +647,9 @@ const Dashboard = () => {
                 
                 // Search in date
                 if (r.date && r.date.includes(query)) return true;
+                
+                // Search in payment mode
+                if (r.paymentMode && r.paymentMode.toLowerCase().includes(query)) return true;
                 
                 // Search in items
                 return r.items.some(item => 
@@ -587,7 +663,14 @@ const Dashboard = () => {
               .map(r => (
               <div key={r.id} className="receipt-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3>🛒 {r.shop} - {r.date ? r.date.split('-').reverse().join('-') : ''}</h3>
+                  <div>
+                    <h3>🛒 {r.shop} - {r.date ? r.date.split('-').reverse().join('-') : ''}</h3>
+                    {r.paymentMode && (
+                      <div style={{ fontSize: '0.9em', opacity: 0.8, marginTop: '0.25rem' }}>
+                        💳 {r.paymentMode}
+                      </div>
+                    )}
+                  </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button 
                       onClick={() => setEditingReceipt(r)}

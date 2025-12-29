@@ -12,9 +12,11 @@ export interface Receipt {
   date: string;
   shop: string;
   items: Item[];
+  paymentMode?: string;
 }
 
 export interface CategoryData {
   categories: { [key: string]: string[] }; // category -> subCategories
   labels: string[];
+  paymentModes: string[];
 }

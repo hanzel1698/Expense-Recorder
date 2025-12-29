@@ -14,13 +14,16 @@ interface ExpenseContextType {
   addCategory: (name: string) => void;
   addSubCategory: (category: string, sub: string) => void;
   addLabel: (label: string) => void;
+  addPaymentMode: (mode: string) => void;
   resetAll: () => void;
   updateCategory: (oldName: string, newName: string) => void;
   updateSubCategory: (category: string, oldSub: string, newSub: string) => void;
   updateLabel: (oldLabel: string, newLabel: string) => void;
+  updatePaymentMode: (oldMode: string, newMode: string) => void;
   removeCategory: (name: string, reassignTo?: string) => void;
   removeSubCategory: (category: string, sub: string, reassignToSub?: string) => void;
   removeLabel: (label: string) => void;
+  removePaymentMode: (mode: string) => void;
   importData: (payload: { receipts: Receipt[]; categoryData: CategoryData }) => void;
   autoBackup: boolean;
   setAutoBackup: (enabled: boolean) => void;
@@ -54,6 +57,7 @@ export const ExpenseProvider: React.FC<{ children: ReactNode }> = ({ children })
       Entertainment: ['Movies', 'Games'],
     },
     labels: ['Organic', 'Discount', 'Gift', 'Bulk'],
+    paymentModes: ['Cash', 'Credit Card', 'Debit Card', 'UPI', 'Net Banking'],
   };
 
   const [receipts, setReceipts] = useState<Receipt[]>(() => {
@@ -73,7 +77,11 @@ export const ExpenseProvider: React.FC<{ children: ReactNode }> = ({ children })
       const raw = localStorage.getItem(CATEGORY_DATA_KEY);
       const parsed = raw ? (JSON.parse(raw) as CategoryData) : null;
       if (parsed && parsed.categories && parsed.labels) {
-        return parsed;
+        // Ensure paymentModes exists for backward compatibility
+        return {
+          ...parsed,
+          paymentModes: parsed.paymentModes || defaultCategoryData.paymentModes,
+        };
       }
       return defaultCategoryData;
     } catch {
@@ -137,6 +145,15 @@ export const ExpenseProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   };
 
+  const addPaymentMode = (mode: string) => {
+    if (!categoryData.paymentModes.includes(mode)) {
+      setCategoryData(prev => ({
+        ...prev,
+        paymentModes: [...prev.paymentModes, mode]
+      }));
+    }
+  };
+
   const updateCategory = (oldName: string, newName: string) => {
     const trimmed = newName.trim();
     if (!trimmed || oldName === trimmed) return;
@@ -191,6 +208,20 @@ export const ExpenseProvider: React.FC<{ children: ReactNode }> = ({ children })
         ...i,
         labels: i.labels.map(l => l === oldLabel ? trimmed : l)
       }))
+    })));
+  };
+
+  const updatePaymentMode = (oldMode: string, newMode: string) => {
+    const trimmed = newMode.trim();
+    if (!trimmed || oldMode === trimmed) return;
+    if (categoryData.paymentModes.includes(trimmed)) return; // avoid duplicate
+    setCategoryData(prev => ({
+      ...prev,
+      paymentModes: prev.paymentModes.map(m => m === oldMode ? trimmed : m)
+    }));
+    setReceipts(prev => prev.map(r => ({
+      ...r,
+      paymentMode: r.paymentMode === oldMode ? trimmed : r.paymentMode
     })));
   };
 
@@ -259,6 +290,17 @@ export const ExpenseProvider: React.FC<{ children: ReactNode }> = ({ children })
     })));
   };
 
+  const removePaymentMode = (mode: string) => {
+    setCategoryData(prev => ({
+      ...prev,
+      paymentModes: prev.paymentModes.filter(m => m !== mode)
+    }));
+    setReceipts(prev => prev.map(r => ({
+      ...r,
+      paymentMode: r.paymentMode === mode ? undefined : r.paymentMode
+    })));
+  };
+
   const resetAll = () => {
     try {
       localStorage.removeItem(RECEIPTS_KEY);
@@ -279,6 +321,7 @@ export const ExpenseProvider: React.FC<{ children: ReactNode }> = ({ children })
             ...Object.fromEntries(Object.entries(incoming.categories).filter(([k]) => k !== 'Uncategorized')),
           },
           labels: Array.isArray(incoming.labels) ? incoming.labels : [],
+          paymentModes: Array.isArray(incoming.paymentModes) ? incoming.paymentModes : defaultCategoryData.paymentModes,
         }
       : defaultCategoryData;
 
@@ -408,13 +451,16 @@ export const ExpenseProvider: React.FC<{ children: ReactNode }> = ({ children })
       addCategory, 
       addSubCategory, 
       addLabel, 
+      addPaymentMode,
       resetAll, 
       updateCategory, 
       updateSubCategory, 
       updateLabel, 
+      updatePaymentMode,
       removeCategory, 
       removeSubCategory, 
       removeLabel, 
+      removePaymentMode,
       importData, 
       autoBackup, 
       setAutoBackup, 
